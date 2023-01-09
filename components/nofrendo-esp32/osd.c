@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-       
+
 #include <noftypes.h>
 #include <nofconfig.h>
 #include <log.h>
@@ -28,14 +28,63 @@
 
 #include <version.h>
 
+//#include "joystick.h"
+
+#include "esp_partition.h"
+#include "esp_system.h"
+
+
 char configfilename[]="na";
 
 /* This is os-specific part of main() */
 int osd_main(int argc, char *argv[])
 {
+    // // Joystick.
+    // //JoystickInit();
+    // odroid_input_gamepad_init();
+    //
+    //
+    // // Boot state overrides
+    // //bool forceConsoleReset = false;
+    //
+    //
+    // //JoystickState bootState = JoystickRead();
+    // odroid_gamepad_state bootState;
+    //
+    //
+    // if (bootState.Volume)
+    // {
+    //     // Force return to factory app to recover from
+    //     // ROM loading crashes
+    //
+    //     // Set factory app
+    //     const esp_partition_t* partition = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
+    //     if (partition == NULL)
+    //     {
+    //         abort();
+    //     }
+    //
+    //     esp_err_t err = esp_ota_set_boot_partition(partition);
+    //     if (err != ESP_OK)
+    //     {
+    //         abort();
+    //     }
+    //
+    //     // Reset
+    //     esp_restart();
+    // }
+
+    // if (bootState.Start)
+    // {
+    //     // Reset emulator if button held at startup to
+    //     // override save state
+    //     forceConsoleReset = true; //emu_reset();
+    // }
+
+
    config.filename = configfilename;
 
-   return main_loop("rom", system_autodetect);
+   return main_loop(argv[0], system_nes);
 }
 
 /* File system interface */

@@ -16,11 +16,11 @@
 #include <freertos/timers.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+
 //Nes stuff wants to define this as well...
 #undef false
 #undef true
 #undef bool
-
 
 #include <math.h>
 #include <string.h>
@@ -28,70 +28,62 @@
 #include <bitmap.h>
 #include <nofconfig.h>
 #include <event.h>
-#include <gui.h>
 #include <log.h>
 #include <nes.h>
 #include <nes_pal.h>
 #include <nesinput.h>
 #include <osd.h>
 #include <stdint.h>
-#include "driver/i2s.h"
 #include "sdkconfig.h"
-#include <spi_lcd.h>
+#include "../nofrendo/nes/nesstate.h"
 
-#include <psxcontroller.h>
+// from box-emu-hal
+#include "spi_lcd.h"
+#include "i2s_audio.h"
+#include "input.h"
 
-#define  DEFAULT_SAMPLERATE   22100
-#define  DEFAULT_FRAGSIZE     128
+#define  DEFAULT_FRAGSIZE    4096
 
 #define  DEFAULT_WIDTH        256
 #define  DEFAULT_HEIGHT       NES_VISIBLE_HEIGHT
 
-
-TimerHandle_t timer;
-
 //Seemingly, this will be called only once. Should call func with a freq of frequency,
 int osd_installtimer(int frequency, void *func, int funcsize, void *counter, int countersize)
 {
-	printf("Timer install, freq=%d\n", frequency);
-	timer=xTimerCreate("nes",configTICK_RATE_HZ/frequency, pdTRUE, NULL, func);
-	xTimerStart(timer, 0);
-   return 0;
+    return 0;
 }
-
 
 /*
 ** Audio
 */
 static void (*audio_callback)(void *buffer, int length) = NULL;
-#if CONFIG_SOUND_ENA
-QueueHandle_t queue;
-static uint16_t *audio_frame;
-#endif
+static int16_t *audio_frame;
 
-static void do_audio_frame() {
+void do_audio_frame() {
+    int remaining = AUDIO_SAMPLE_RATE / NES_REFRESH_RATE;
+    while(remaining) {
+        int n=DEFAULT_FRAGSIZE;
+        if (n>remaining) n=remaining;
 
-#if CONFIG_SOUND_ENA
-	int left=DEFAULT_SAMPLERATE/NES_REFRESH_RATE;
-	while(left) {
-		int n=DEFAULT_FRAGSIZE;
-		if (n>left) n=left;
-		audio_callback(audio_frame, n); //get more data
-		//16 bit mono -> 32-bit (16 bit r+l)
-		for (int i=n-1; i>=0; i--) {
-			audio_frame[i*2+1]=audio_frame[i];
-			audio_frame[i*2]=audio_frame[i];
-		}
-		i2s_write_bytes(0, audio_frame, 4*n, portMAX_DELAY);
-		left-=n;
-	}
-#endif
+        //get more data
+        audio_callback(audio_frame, n);
+
+        //16 bit mono -> 32-bit (16 bit r+l)
+        for (int i=n-1; i>=0; i--) {
+            int sample = (int)audio_frame[i];
+            audio_frame[i*2+1] = (short)sample;
+            audio_frame[i*2] = (short)sample;
+        }
+        audio_play_frame(audio_frame, 2*n);
+
+        remaining -= n;
+    }
 }
 
 void osd_setsound(void (*playfunc)(void *buffer, int length))
 {
-   //Indicates we should call playfunc() to get more data.
-   audio_callback = playfunc;
+    //Indicates we should call playfunc() to get more data.
+    audio_callback = playfunc;
 }
 
 static void osd_stopsound(void)
@@ -100,39 +92,16 @@ static void osd_stopsound(void)
 }
 
 
-static int osd_init_sound(void)
-{
-#if CONFIG_SOUND_ENA
-	audio_frame=malloc(4*DEFAULT_FRAGSIZE);
-	i2s_config_t cfg={
-		.mode=I2S_MODE_DAC_BUILT_IN|I2S_MODE_TX|I2S_MODE_MASTER,
-		.sample_rate=DEFAULT_SAMPLERATE,
-		.bits_per_sample=I2S_BITS_PER_SAMPLE_16BIT,
-		.channel_format=I2S_CHANNEL_FMT_RIGHT_LEFT,
-		.communication_format=I2S_COMM_FORMAT_I2S_MSB,
-		.intr_alloc_flags=0,
-		.dma_buf_count=4,
-		.dma_buf_len=512
-	};
-	i2s_driver_install(0, &cfg, 4, &queue);
-	i2s_set_pin(0, NULL);
-	i2s_set_dac_mode(I2S_DAC_CHANNEL_LEFT_EN); 
-
-	//I2S enables *both* DAC channels; we only need DAC1.
-	//ToDo: still needed now I2S supports set_dac_mode?
-	CLEAR_PERI_REG_MASK(RTC_IO_PAD_DAC1_REG, RTC_IO_PDAC1_DAC_XPD_FORCE_M);
-	CLEAR_PERI_REG_MASK(RTC_IO_PAD_DAC1_REG, RTC_IO_PDAC1_XPD_DAC_M);
-
-#endif
-
+static int osd_init_sound(void) {
+	audio_frame=get_audio_buffer();
+    audio_init();
 	audio_callback = NULL;
-
 	return 0;
 }
 
 void osd_getsoundinfo(sndinfo_t *info)
 {
-   info->sample_rate = DEFAULT_SAMPLERATE;
+   info->sample_rate = AUDIO_SAMPLE_RATE;
    info->bps = 16;
 }
 
@@ -148,7 +117,6 @@ static void clear(uint8 color);
 static bitmap_t *lock_write(void);
 static void free_write(int num_dirties, rect_t *dirty_rects);
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects);
-static char fb[1]; //dummy
 
 QueueHandle_t vidQueue;
 
@@ -166,6 +134,75 @@ viddriver_t sdlDriver =
    false          /* invalidate flag */
 };
 
+// NES
+#define NES_GAME_WIDTH (256)
+#define NES_GAME_HEIGHT (224) /* NES_VISIBLE_HEIGHT */
+
+static bool scale_video = false;
+static bool prev_scale_video = false;
+void osd_set_video_scale(bool new_video_scale) {
+    scale_video = new_video_scale;
+}
+void ili9341_write_frame_nes(const uint8_t* buffer, uint16_t* myPalette) {
+    short x, y;
+    int x_offset = (320-256)/2;
+    int y_offset = (240-224)/2;
+    if (buffer == NULL) {
+        // clear the buffer, clear the screen
+        lcd_write_frame(0+x_offset, 0+y_offset, NES_GAME_WIDTH-1, NES_GAME_HEIGHT-1, NULL);
+    } else {
+        if (prev_scale_video != scale_video) {
+            // update our local
+            prev_scale_video = scale_video;
+            // clear the frame
+            lcd_write_frame(0,0,320,240,NULL);
+        }
+        if (scale_video) {
+            uint8_t* framePtr = buffer;
+            static int buffer_index = 0;
+            static const int LINE_COUNT = 50;
+            float x_scale = 1.25f;
+            float y_scale = 1.0f;
+            for (y = 0; y < 240; y+= LINE_COUNT) {
+                uint16_t* line_buffer = buffer_index ? (uint16_t*)get_vram1() : (uint16_t*)get_vram0();
+                buffer_index = buffer_index ? 0 : 1;
+                int num_lines_written = 0;
+                for (int i=0; i<LINE_COUNT; i++) {
+                    int src_y = (float)(y+i) / y_scale;
+                    if (src_y >= NES_GAME_HEIGHT) break;
+                    for (x=0; x<320; ++x) {
+                        int src_x = (float)(x) / x_scale;
+                        int src_index = (src_y)*NES_GAME_WIDTH + src_x;
+                        int dst_index = i*320 + x;
+                        line_buffer[dst_index] = (uint16_t)myPalette[framePtr[src_index]];
+                    }
+                    num_lines_written++;
+                }
+                lcd_write_frame(0, y_offset+y, 320, num_lines_written, (uint8_t*)&line_buffer[0]);
+            }
+        } else {
+            uint8_t* framePtr = buffer;
+            static int buffer_index = 0;
+            static const int LINE_COUNT = 50;
+            for (y = 0; y < NES_GAME_HEIGHT; y+= LINE_COUNT) {
+                uint16_t* line_buffer = buffer_index ? (uint16_t*)get_vram1() : (uint16_t*)get_vram0();
+                buffer_index = buffer_index ? 0 : 1;
+                int num_lines_written = 0;
+                for (int i=0; i<LINE_COUNT; i++) {
+                    int src_y = y+i;
+                    if (src_y >= NES_GAME_HEIGHT) break;
+                    for (x=0; x<NES_GAME_WIDTH; ++x) {
+                        int src_index = (src_y)*NES_GAME_WIDTH + x;
+                        int dst_index = i*NES_GAME_WIDTH + x;
+                        line_buffer[dst_index] = (uint16_t)myPalette[framePtr[src_index]];
+                    }
+                    num_lines_written++;
+                }
+                lcd_write_frame(x_offset, y_offset+y, NES_GAME_WIDTH, num_lines_written, (uint8_t*)&line_buffer[0]);
+            }
+        }
+    }
+}
 
 bitmap_t *myBitmap;
 
@@ -206,11 +243,11 @@ static void set_palette(rgb_t *pal)
 
    int i;
 
+   printf("set palette!\n");
    for (i = 0; i < 256; i++)
    {
-      c=(pal[i].b>>3)+((pal[i].g>>2)<<5)+((pal[i].r>>3)<<11);
-      //myPalette[i]=(c>>8)|((c&0xff)<<8);
-      myPalette[i]=c;
+      c = make_color(pal[i].r, pal[i].g, pal[i].b);
+      myPalette[i]= c;
    }
 
 }
@@ -218,16 +255,13 @@ static void set_palette(rgb_t *pal)
 /* clear all frames to a particular color */
 static void clear(uint8 color)
 {
-//   SDL_FillRect(mySurface, 0, color);
 }
-
-
 
 /* acquire the directbuffer for writing */
 static bitmap_t *lock_write(void)
 {
 //   SDL_LockSurface(mySurface);
-   myBitmap = bmp_createhw((uint8*)fb, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_WIDTH*2);
+   myBitmap = bmp_createhw((uint8*)get_frame_buffer1(), DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_WIDTH*2);
    return myBitmap;
 }
 
@@ -237,24 +271,38 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
    bmp_destroy(&myBitmap);
 }
 
-
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects) {
-	xQueueSend(vidQueue, &bmp, 0);
-	do_audio_frame();
+    uint8_t *lcdfb = get_frame_buffer0();
+    if (bmp->line[0] != NULL)
+    {
+        memcpy(lcdfb, bmp->line[0], 256 * 224);
+
+        void* arg = (void*)lcdfb;
+    	xQueueSend(vidQueue, &arg, portMAX_DELAY);
+    }
 }
 
-
 //This runs on core 1.
+volatile bool exitVideoTaskFlag = false;
 static void videoTask(void *arg) {
-	int x, y;
-	bitmap_t *bmp=NULL;
-	x = (320-DEFAULT_WIDTH)/2;
-    y = ((240-DEFAULT_HEIGHT)/2);
-    while(1) {
-//		xQueueReceive(vidQueue, &bmp, portMAX_DELAY);//skip one frame to drop to 30
+    uint8_t* bmp = NULL;
+
+    while(1)
+	{
+		xQueuePeek(vidQueue, &bmp, portMAX_DELAY);
+
+        if (bmp == 1) break;
+
+        ili9341_write_frame_nes(bmp, myPalette);
+
 		xQueueReceive(vidQueue, &bmp, portMAX_DELAY);
-		ili9341_write_frame(x, y, DEFAULT_WIDTH, DEFAULT_HEIGHT, (const uint8_t **)bmp->line);
 	}
+
+    exitVideoTaskFlag = true;
+
+    vTaskDelete(NULL);
+
+    while(1){}
 }
 
 
@@ -264,8 +312,69 @@ static void videoTask(void *arg) {
 
 static void osd_initinput()
 {
-	psxcontrollerInit();
+    init_input();
 }
+
+
+static void SaveState()
+{
+}
+
+static void PowerDown()
+{
+    uint16_t* param = 1;
+
+    // Stop tasks
+    printf("PowerDown: stopping tasks.\n");
+
+    xQueueSend(vidQueue, &param, portMAX_DELAY);
+    while (!exitVideoTaskFlag) { vTaskDelay(1); }
+
+    // state
+    printf("PowerDown: Saving state.\n");
+    SaveState();
+
+    /*
+    // LCD
+    printf("PowerDown: Powerdown LCD panel.\n");
+
+    printf("PowerDown: Entering deep sleep.\n");
+
+    // Should never reach here
+    abort();
+    */
+}
+
+static int ConvertJoystickInput()
+{
+	int result = 0;
+
+    static struct InputState state;
+    get_input_state(&state);
+
+	if (!state.a)
+		result |= (1<<13);
+	if (!state.b)
+		result |= (1 << 14);
+	if (!state.select)
+		result |= (1 << 0);
+	if (!state.start)
+		result |= (1 << 3);
+	if (!state.right)
+        result |= (1 << 5);
+	if (!state.left)
+        result |= (1 << 7);
+	if (!state.up)
+        result |= (1 << 4);
+	if (!state.down)
+        result |= (1 << 6);
+
+	return result;
+}
+
+
+extern nes_t* console_nes;
+extern nes6502_context cpu;
 
 void osd_getinput(void)
 {
@@ -274,12 +383,14 @@ void osd_getinput(void)
 			0,0,0,0,event_soft_reset,event_joypad1_a,event_joypad1_b,event_hard_reset
 		};
 	static int oldb=0xffff;
-	int b=psxReadInput();
+    if (user_quit()) {
+        nes_poweroff();
+    }
+	int b=ConvertJoystickInput();
 	int chg=b^oldb;
 	int x;
 	oldb=b;
 	event_t evh;
-//	printf("Input: %x\n", b);
 	for (x=0; x<16; x++) {
 		if (chg&1) {
 			evh=event_get(ev[x]);
@@ -317,18 +428,22 @@ static int logprint(const char *string)
 /*
 ** Startup
 */
+// Boot state overrides
+bool forceConsoleReset = false;
 
 int osd_init()
 {
 	log_chain_logfunc(logprint);
 
 	if (osd_init_sound())
-		return -1;
+    {
+        abort();
+    }
 
-	ili9341_init();
-	ili9341_write_frame(0,0,320,240,NULL);
 	vidQueue=xQueueCreate(1, sizeof(bitmap_t *));
-	xTaskCreatePinnedToCore(&videoTask, "videoTask", 2048, NULL, 5, NULL, 1);
-	osd_initinput();
+	xTaskCreatePinnedToCore(&videoTask, "videoTask", 6*1024, NULL, 20, NULL, 1);
+
+    osd_initinput();
+
 	return 0;
 }

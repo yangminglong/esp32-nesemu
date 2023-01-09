@@ -70,10 +70,7 @@ typedef struct nes_s
    rominfo_t *rominfo;
 
    /* video buffer */
-   /* For the ESP32, it costs too much memory to render to a separate buffer and blit that to the main buffer.
-      Instead, the code has been modified to directly grab the primary buffer from the video subsystem and render
-      there, saving us about 64K of memory. */
-//   bitmap_t *vidbuf; 
+   bitmap_t *vidbuf;
 
    bool fiq_occurred;
    uint8 fiq_state;
@@ -109,6 +106,8 @@ extern void nes_setfiq(uint8 state);
 extern void nes_nmi(void);
 extern void nes_irq(void);
 extern void nes_emulate(void);
+extern void nes_prep_emulation(char* filename, nes_t *machine);
+extern void nes_emulateframe(unsigned char reset);
 
 extern void nes_reset(int reset_type);
 

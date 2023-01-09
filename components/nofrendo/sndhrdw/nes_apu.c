@@ -999,7 +999,7 @@ apu_t *apu_create(double base_freq, int sample_rate, int refresh_rate, int sampl
    apu_t *temp_apu;
    int channel;
 
-   temp_apu = malloc(sizeof(apu_t));
+   temp_apu = _my_malloc(sizeof(apu_t));
    if (NULL == temp_apu)
       return NULL;
 

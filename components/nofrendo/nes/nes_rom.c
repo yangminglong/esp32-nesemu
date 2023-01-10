@@ -3,14 +3,14 @@
 **
 **
 ** This program is free software; you can redistribute it and/or
-** modify it under the terms of version 2 of the GNU Library General
+** modify it under the terms of version 2 of the GNU Library General 
 ** Public License as published by the Free Software Foundation.
 **
-** This program is distributed in the hope that it will be useful,
+** This program is distributed in the hope that it will be useful, 
 ** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-** Library General Public License for more details.  To obtain a
-** copy of the GNU Library General Public License, write to the Free
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+** Library General Public License for more details.  To obtain a 
+** copy of the GNU Library General Public License, write to the Free 
 ** Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
 ** Any permitted reproduction of these routines, in whole or in part,
@@ -24,7 +24,6 @@
 */
 
 /* TODO: make this a generic ROM loading routine */
-#include <stdlib.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -93,7 +92,7 @@ static void rom_savesram(rominfo_t *rominfo)
 
    if (rominfo->flags & ROM_FLAG_BATTERY)
    {
-      memcpy(fn, rominfo->filename, PATH_MAX);
+      strncpy(fn, rominfo->filename, PATH_MAX);
       osd_newextension(fn, ".sav");
 
       fp = fopen(fn, "wb");
@@ -116,7 +115,7 @@ static void rom_loadsram(rominfo_t *rominfo)
 
    if (rominfo->flags & ROM_FLAG_BATTERY)
    {
-      memcpy(fn, rominfo->filename, PATH_MAX);
+      strncpy(fn, rominfo->filename, PATH_MAX);
       osd_newextension(fn, ".sav");
 
       fp = fopen(fn, "rb");
@@ -133,11 +132,11 @@ static void rom_loadsram(rominfo_t *rominfo)
 static int rom_allocsram(rominfo_t *rominfo)
 {
    /* Load up SRAM */
-   rominfo->sram = _my_malloc(SRAM_BANK_LENGTH * rominfo->sram_banks);
+   rominfo->sram = malloc(SRAM_BANK_LENGTH * rominfo->sram_banks);
    if (NULL == rominfo->sram)
    {
-      printf("Could not allocate space for battery RAM");
-      abort(); //return -1;
+      gui_sendmsg(GUI_RED, "Could not allocate space for battery RAM");
+      return -1;
    }
 
    /* make damn sure SRAM is clear */
@@ -167,7 +166,7 @@ static int rom_loadrom(unsigned char **rom, rominfo_t *rominfo)
 
    /* Allocate ROM space, and load it up! */
 /*
-   rominfo->rom = _my_malloc((rominfo->rom_banks * ROM_BANK_LENGTH));
+   rominfo->rom = malloc((rominfo->rom_banks * ROM_BANK_LENGTH));
    if (NULL == rominfo->rom)
    {
       gui_sendmsg(GUI_RED, "Could not allocate space for ROM image");
@@ -183,7 +182,7 @@ static int rom_loadrom(unsigned char **rom, rominfo_t *rominfo)
    if (rominfo->vrom_banks)
    {
 /*
-      rominfo->vrom = _my_malloc((rominfo->vrom_banks * VROM_BANK_LENGTH));
+      rominfo->vrom = malloc((rominfo->vrom_banks * VROM_BANK_LENGTH));
       if (NULL == rominfo->vrom)
       {
          gui_sendmsg(GUI_RED, "Could not allocate space for VROM");
@@ -197,11 +196,11 @@ static int rom_loadrom(unsigned char **rom, rominfo_t *rominfo)
    }
    else
    {
-      rominfo->vram = _my_malloc(VRAM_LENGTH);
+      rominfo->vram = malloc(VRAM_LENGTH);
       if (NULL == rominfo->vram)
       {
-         printf("Could not allocate space for VRAM");
-         abort(); //return -1;
+         gui_sendmsg(GUI_RED, "Could not allocate space for VRAM");
+         return -1;
       }
       memset(rominfo->vram, 0, VRAM_LENGTH);
    }
@@ -219,7 +218,7 @@ static void rom_checkforpal(rominfo_t *rominfo)
 
    ASSERT(rominfo);
 
-   memcpy(filename, rominfo->filename, PATH_MAX);
+   strncpy(filename, rominfo->filename, PATH_MAX);
    osd_newextension(filename, ".pal");
 
    fp = fopen(filename, "rb");
@@ -404,14 +403,14 @@ char *rom_getinfo(rominfo_t *rominfo)
    /* Look to see if we were given a path along with filename */
    /* TODO: strip extensions */
    if (strrchr(rominfo->filename, PATH_SEP))
-      memcpy(romname, strrchr(rominfo->filename, PATH_SEP) + 1, PATH_MAX);
+      strncpy(romname, strrchr(rominfo->filename, PATH_SEP) + 1, PATH_MAX);
    else
-      memcpy(romname, rominfo->filename, PATH_MAX);
+      strncpy(romname, rominfo->filename, PATH_MAX);
 
    /* If our filename is too long, truncate our displayed filename */
    if (strlen(romname) > ROM_DISP_MAXLEN)
    {
-      memcpy(info, romname, ROM_DISP_MAXLEN - 3);
+      strncpy(info, romname, ROM_DISP_MAXLEN - 3);
       strcpy(info + (ROM_DISP_MAXLEN - 3), "...");
    }
    else
@@ -422,7 +421,7 @@ char *rom_getinfo(rominfo_t *rominfo)
    sprintf(temp, " [%d] %dk/%dk %c", rominfo->mapper_number,
            rominfo->rom_banks * 16, rominfo->vrom_banks * 8,
            (rominfo->mirror == MIRROR_VERT) ? 'V' : 'H');
-
+   
    /* Stick it on there! */
    strncat(info, temp, PATH_MAX - strlen(info));
 
@@ -437,19 +436,16 @@ char *rom_getinfo(rominfo_t *rominfo)
 }
 
 /* Load a ROM image into memory */
-rominfo_t *nes_rom_load(const char *filename)
+rominfo_t *rom_load(const char *filename)
 {
    unsigned char *rom=(unsigned char*)osd_getromdata();
    rominfo_t *rominfo;
 
-   rominfo = _my_malloc(sizeof(rominfo_t));
+   rominfo = malloc(sizeof(rominfo_t));
    if (NULL == rominfo)
       return NULL;
 
    memset(rominfo, 0, sizeof(rominfo_t));
-
-   memcpy(rominfo->filename, filename, sizeof(rominfo->filename));
-   printf("rom_load: rominfo->filename='%s'\n", rominfo->filename);
 
    /* Get the header and stick it into rominfo struct */
 	if (rom_getheader(&rom, rominfo))
@@ -469,7 +465,7 @@ rominfo_t *nes_rom_load(const char *filename)
    if (rom_allocsram(rominfo))
       goto _fail;
 
-   rom_loadtrainer(&rom, rominfo);
+      rom_loadtrainer(&rom, rominfo);
 
 	if (rom_loadrom(&rom, rominfo))
       goto _fail;
@@ -581,7 +577,7 @@ void rom_free(rominfo_t **rominfo)
 ** little error fixed (tempinfo vs rominfo->info)
 **
 ** Revision 1.10  2000/07/19 15:59:39  neil
-** PATH_MAX, memcpy, snprintf, and strncat are our friends
+** PATH_MAX, strncpy, snprintf, and strncat are our friends
 **
 ** Revision 1.9  2000/07/17 01:52:27  matt
 ** made sure last line of all source files is a newline

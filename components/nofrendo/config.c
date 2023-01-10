@@ -41,7 +41,7 @@ static myvar_t *my_create(const char *group, const char *key, const char *value)
 {
    myvar_t *var;
 
-   var = _my_malloc(sizeof(*var));
+   var = malloc(sizeof(*var));
    if (NULL == var)
    {
       return 0;
@@ -50,9 +50,9 @@ static myvar_t *my_create(const char *group, const char *key, const char *value)
    var->less = var->greater = NULL;
    var->group = var->key = var->value = NULL;
 
-   if ((var->group = _my_malloc(strlen(group) + 1))
-       && (var->key = _my_malloc(strlen(key) + 1))
-       && (var->value = _my_malloc(strlen(value) + 1)))
+   if ((var->group = malloc(strlen(group) + 1))
+       && (var->key = malloc(strlen(key) + 1))
+       && (var->value = malloc(strlen(value) + 1)))
    {
       strcpy(var->group, group);
       strcpy(var->key, key);
@@ -152,7 +152,7 @@ static char *my_getline(FILE *stream)
 
       if (NULL == dynamic)
       {
-         dynamic = _my_malloc(strlen(buf) + 1);
+         dynamic = malloc(strlen(buf) + 1);
          if (NULL == dynamic)
          {
             return 0;
@@ -163,7 +163,7 @@ static char *my_getline(FILE *stream)
       {
          /* a mini-version of realloc that works with our memory manager */
          char *temp = NULL;
-         temp = _my_malloc(strlen(dynamic) + strlen(buf) + 1);
+         temp = malloc(strlen(dynamic) + strlen(buf) + 1);
          if (NULL == temp)
             return 0;
 
@@ -235,7 +235,7 @@ static int load_config(char *filename)
                   *s++ = '\0';
                }
 
-               if ((value = _my_malloc(strlen(group) + 1)))
+               if ((value = malloc(strlen(group) + 1)))
                {
                   strcpy(value, group);
                }

@@ -1,18 +1,16 @@
-#pragma GCC optimize ("O3")
-
 /*
 ** Nofrendo (c) 1998-2000 Matthew Conte (matt@conte.com)
 **
 **
 ** This program is free software; you can redistribute it and/or
-** modify it under the terms of version 2 of the GNU Library General
+** modify it under the terms of version 2 of the GNU Library General 
 ** Public License as published by the Free Software Foundation.
 **
-** This program is distributed in the hope that it will be useful,
+** This program is distributed in the hope that it will be useful, 
 ** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-** Library General Public License for more details.  To obtain a
-** copy of the GNU Library General Public License, write to the Free
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+** Library General Public License for more details.  To obtain a 
+** copy of the GNU Library General Public License, write to the Free 
 ** Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
 ** Any permitted reproduction of these routines, in whole or in part,
@@ -40,7 +38,7 @@
 #define  ADD_CYCLES(x) \
 { \
    remaining_cycles -= (x); \
-   nes_cpu.total_cycles += (x); \
+   cpu.total_cycles += (x); \
 }
 
 /*
@@ -181,7 +179,7 @@
 { \
    ZP_IND_Y_ADDR(btemp); \
    value = ZP_READBYTE(btemp); \
-}
+}  
 
 /* Indexed indirect */
 #define INDIR_X_ADDR(address) \
@@ -195,7 +193,7 @@
 { \
    INDIR_X_ADDR(address); \
    value = mem_readbyte(address); \
-}
+} 
 
 #define INDIR_X_BYTE(value) \
 { \
@@ -213,7 +211,7 @@
 { \
    INDIR_Y_ADDR(address); \
    value = mem_readbyte(address); \
-}
+} 
 
 #define INDIR_Y_BYTE(value) \
 { \
@@ -554,9 +552,9 @@
 { \
    i_flag = 0; \
    ADD_CYCLES(2); \
-   if (nes_cpu.int_pending && remaining_cycles > 0) \
+   if (cpu.int_pending && remaining_cycles > 0) \
    { \
-      nes_cpu.int_pending = 0; \
+      cpu.int_pending = 0; \
       IRQ_PROC(); \
       ADD_CYCLES(INT_CYCLES); \
    } \
@@ -568,7 +566,7 @@
    ADD_CYCLES(2); \
 }
 
-/* C is clear when data > A */
+/* C is clear when data > A */ 
 #define _COMPARE(reg, value) \
 { \
    temp = (reg) - (value); \
@@ -686,8 +684,8 @@
 #define JAM() \
 { \
    PC--; \
-   nes_cpu.jammed = true; \
-   nes_cpu.int_pending = 0; \
+   cpu.jammed = true; \
+   cpu.int_pending = 0; \
    ADD_CYCLES(2); \
 }
 #endif /* !NES6502_TESTOPS */
@@ -896,9 +894,9 @@
    PC = PULL(); \
    PC |= PULL() << 8; \
    ADD_CYCLES(6); \
-   if (0 == i_flag && nes_cpu.int_pending && remaining_cycles > 0) \
+   if (0 == i_flag && cpu.int_pending && remaining_cycles > 0) \
    { \
-      nes_cpu.int_pending = 0; \
+      cpu.int_pending = 0; \
       IRQ_PROC(); \
       ADD_CYCLES(INT_CYCLES); \
    } \
@@ -1133,7 +1131,7 @@
 
 
 /* internal CPU context */
-nes6502_context nes_cpu;
+static nes6502_context cpu;
 static int remaining_cycles = 0; /* so we can release timeslice */
 /* memory region pointers */
 static uint8 *ram = NULL, *stack = NULL;
@@ -1164,7 +1162,7 @@ INLINE uint32 bank_readword(register uint32 address)
    ** be fetching a word across page boundaries, which only would
    ** make sense if the banks were physically consecutive.
    */
-   return (uint32) (*(uint16 *)(nes_cpu.mem_page[address >> NES6502_BANKSHIFT] + (address & NES6502_BANKMASK)));
+   return (uint32) (*(uint16 *)(cpu.mem_page[address >> NES6502_BANKSHIFT] + (address & NES6502_BANKMASK)));
 }
 
 #else /* !HOST_LITTLE_ENDIAN */
@@ -1182,9 +1180,9 @@ INLINE uint32 zp_readword(register uint8 address)
 INLINE uint32 bank_readword(register uint32 address)
 {
 #ifdef TARGET_CPU_PPC
-   return __lhbrx(nes_cpu.mem_page[address >> NES6502_BANKSHIFT], address & NES6502_BANKMASK);
+   return __lhbrx(cpu.mem_page[address >> NES6502_BANKSHIFT], address & NES6502_BANKMASK);
 #else /* !TARGET_CPU_PPC */
-   uint32 x = (uint32) *(uint16 *)(nes_cpu.mem_page[address >> NES6502_BANKSHIFT] + (address & NES6502_BANKMASK));
+   uint32 x = (uint32) *(uint16 *)(cpu.mem_page[address >> NES6502_BANKSHIFT] + (address & NES6502_BANKMASK));
    return (x << 8) | (x >> 8);
 #endif /* !TARGET_CPU_PPC */
 }
@@ -1193,12 +1191,12 @@ INLINE uint32 bank_readword(register uint32 address)
 
 INLINE uint8 bank_readbyte(register uint32 address)
 {
-   return nes_cpu.mem_page[address >> NES6502_BANKSHIFT][address & NES6502_BANKMASK];
+   return cpu.mem_page[address >> NES6502_BANKSHIFT][address & NES6502_BANKMASK];
 }
 
 INLINE void bank_writebyte(register uint32 address, register uint8 value)
 {
-   nes_cpu.mem_page[address >> NES6502_BANKSHIFT][address & NES6502_BANKMASK] = value;
+   cpu.mem_page[address >> NES6502_BANKSHIFT][address & NES6502_BANKMASK] = value;
 }
 
 /* read a byte of 6502 memory */
@@ -1220,7 +1218,7 @@ static uint8 mem_readbyte(uint32 address)
    /* check memory range handlers */
    else
    {
-      for (mr = nes_cpu.read_handler; mr->min_range != 0xFFFFFFFF; mr++)
+      for (mr = cpu.read_handler; mr->min_range != 0xFFFFFFFF; mr++)
       {
          if (address >= mr->min_range && address <= mr->max_range)
             return mr->read_func(address);
@@ -1245,7 +1243,7 @@ static void mem_writebyte(uint32 address, uint8 value)
    /* check memory range handlers */
    else
    {
-      for (mw = nes_cpu.write_handler; mw->min_range != 0xFFFFFFFF; mw++)
+      for (mw = cpu.write_handler; mw->min_range != 0xFFFFFFFF; mw++)
       {
          if (address >= mw->min_range && address <= mw->max_range)
          {
@@ -1266,16 +1264,16 @@ void nes6502_setcontext(nes6502_context *context)
 
    ASSERT(context);
 
-   nes_cpu = *context;
+   cpu = *context;
 
    /* set dead page for all pages not pointed at anything */
    for (loop = 0; loop < NES6502_NUMBANKS; loop++)
    {
-      if (NULL == nes_cpu.mem_page[loop])
-         nes_cpu.mem_page[loop] = null_page;
+      if (NULL == cpu.mem_page[loop])
+         cpu.mem_page[loop] = null_page;
    }
 
-   ram = nes_cpu.mem_page[0];  /* quick zero-page/RAM references */
+   ram = cpu.mem_page[0];  /* quick zero-page/RAM references */
    stack = ram + STACK_OFFSET;
 }
 
@@ -1286,7 +1284,7 @@ void nes6502_getcontext(nes6502_context *context)
 
    ASSERT(context);
 
-   *context = nes_cpu;
+   *context = cpu;
 
    /* reset dead pages to null */
    for (loop = 0; loop < NES6502_NUMBANKS; loop++)
@@ -1305,32 +1303,32 @@ uint8 nes6502_getbyte(uint32 address)
 /* get number of elapsed cycles */
 uint32 nes6502_getcycles(bool reset_flag)
 {
-   uint32 cycles = nes_cpu.total_cycles;
+   uint32 cycles = cpu.total_cycles;
 
    if (reset_flag)
-      nes_cpu.total_cycles = 0;
+      cpu.total_cycles = 0;
 
    return cycles;
 }
 
 #define  GET_GLOBAL_REGS() \
 { \
-   PC = nes_cpu.pc_reg; \
-   A = nes_cpu.a_reg; \
-   X = nes_cpu.x_reg; \
-   Y = nes_cpu.y_reg; \
-   SCATTER_FLAGS(nes_cpu.p_reg); \
-   S = nes_cpu.s_reg; \
+   PC = cpu.pc_reg; \
+   A = cpu.a_reg; \
+   X = cpu.x_reg; \
+   Y = cpu.y_reg; \
+   SCATTER_FLAGS(cpu.p_reg); \
+   S = cpu.s_reg; \
 }
 
 #define  STORE_LOCAL_REGS() \
 { \
-   nes_cpu.pc_reg = PC; \
-   nes_cpu.a_reg = A; \
-   nes_cpu.x_reg = X; \
-   nes_cpu.y_reg = Y; \
-   nes_cpu.p_reg = COMBINE_FLAGS(); \
-   nes_cpu.s_reg = S; \
+   cpu.pc_reg = PC; \
+   cpu.a_reg = A; \
+   cpu.x_reg = X; \
+   cpu.y_reg = Y; \
+   cpu.p_reg = COMBINE_FLAGS(); \
+   cpu.s_reg = S; \
 }
 
 #define  MIN(a,b)    (((a) < (b)) ? (a) : (b))
@@ -1368,7 +1366,7 @@ uint32 nes6502_getcycles(bool reset_flag)
 */
 int nes6502_execute(int timeslice_cycles)
 {
-   int old_cycles = nes_cpu.total_cycles;
+   int old_cycles = cpu.total_cycles;
 
    uint32 temp, addr; /* for macros */
    uint8 btemp, baddr; /* for macros */
@@ -1383,7 +1381,7 @@ int nes6502_execute(int timeslice_cycles)
    uint8 A, X, Y, S;
 
 #ifdef NES6502_JUMPTABLE
-
+   
    static const void *opcode_table[256] =
    {
       &&op00, &&op01, &&op02, &&op03, &&op04, &&op05, &&op06, &&op07,
@@ -1427,18 +1425,18 @@ int nes6502_execute(int timeslice_cycles)
    GET_GLOBAL_REGS();
 
    /* check for DMA cycle burning */
-   if (nes_cpu.burn_cycles && remaining_cycles > 0)
+   if (cpu.burn_cycles && remaining_cycles > 0)
    {
       int burn_for;
-
-      burn_for = MIN(remaining_cycles, nes_cpu.burn_cycles);
+      
+      burn_for = MIN(remaining_cycles, cpu.burn_cycles);
       ADD_CYCLES(burn_for);
-      nes_cpu.burn_cycles -= burn_for;
+      cpu.burn_cycles -= burn_for;
    }
 
-   if (0 == i_flag && nes_cpu.int_pending && remaining_cycles > 0)
+   if (0 == i_flag && cpu.int_pending && remaining_cycles > 0)
    {
-      nes_cpu.int_pending = 0;
+      cpu.int_pending = 0;
       IRQ_PROC();
       ADD_CYCLES(INT_CYCLES);
    }
@@ -1497,7 +1495,7 @@ int nes6502_execute(int timeslice_cycles)
          OPCODE_END
 
       OPCODE_BEGIN(05)  /* ORA $nn */
-         ORA(3, ZERO_PAGE_BYTE);
+         ORA(3, ZERO_PAGE_BYTE); 
          OPCODE_END
 
       OPCODE_BEGIN(06)  /* ASL $nn */
@@ -1509,7 +1507,7 @@ int nes6502_execute(int timeslice_cycles)
          OPCODE_END
 
       OPCODE_BEGIN(08)  /* PHP */
-         PHP();
+         PHP(); 
          OPCODE_END
 
       OPCODE_BEGIN(09)  /* ORA #$nn */
@@ -1525,7 +1523,7 @@ int nes6502_execute(int timeslice_cycles)
          OPCODE_END
 
       OPCODE_BEGIN(0C)  /* NOP $nnnn */
-         TOP();
+         TOP(); 
          OPCODE_END
 
       OPCODE_BEGIN(0D)  /* ORA $nnnn */
@@ -1547,7 +1545,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(11)  /* ORA ($nn),Y */
          ORA(5, INDIR_Y_BYTE_READ);
          OPCODE_END
-
+      
       OPCODE_BEGIN(13)  /* SLO ($nn),Y */
          SLO(8, INDIR_Y, mem_writebyte, addr);
          OPCODE_END
@@ -1580,7 +1578,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(19)  /* ORA $nnnn,Y */
          ORA(4, ABS_IND_Y_BYTE_READ);
          OPCODE_END
-
+      
       OPCODE_BEGIN(1A)  /* NOP */
       OPCODE_BEGIN(3A)  /* NOP */
       OPCODE_BEGIN(5A)  /* NOP */
@@ -1614,7 +1612,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(1F)  /* SLO $nnnn,X */
          SLO(7, ABS_IND_X, mem_writebyte, addr);
          OPCODE_END
-
+      
       OPCODE_BEGIN(20)  /* JSR $nnnn */
          JSR();
          OPCODE_END
@@ -1986,7 +1984,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(8E)  /* STX $nnnn */
          STX(4, ABSOLUTE_ADDR, mem_writebyte, addr);
          OPCODE_END
-
+      
       OPCODE_BEGIN(8F)  /* SAX $nnnn */
          SAX(4, ABSOLUTE_ADDR, mem_writebyte, addr);
          OPCODE_END
@@ -2050,7 +2048,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(9F)  /* SHA $nnnn,Y */
          SHA(5, ABS_IND_Y_ADDR, mem_writebyte, addr);
          OPCODE_END
-
+      
       OPCODE_BEGIN(A0)  /* LDY #$nn */
          LDY(2, IMMEDIATE_BYTE);
          OPCODE_END
@@ -2106,7 +2104,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(AD)  /* LDA $nnnn */
          LDA(4, ABSOLUTE_BYTE);
          OPCODE_END
-
+      
       OPCODE_BEGIN(AE)  /* LDX $nnnn */
          LDX(4, ABSOLUTE_BYTE);
          OPCODE_END
@@ -2234,7 +2232,7 @@ int nes6502_execute(int timeslice_cycles)
       OPCODE_BEGIN(CF)  /* DCP $nnnn */
          DCP(6, ABSOLUTE, mem_writebyte, addr);
          OPCODE_END
-
+      
       OPCODE_BEGIN(D0)  /* BNE $nnnn */
          BNE();
          OPCODE_END
@@ -2269,7 +2267,7 @@ int nes6502_execute(int timeslice_cycles)
 
       OPCODE_BEGIN(DB)  /* DCP $nnnn,Y */
          DCP(7, ABS_IND_Y, mem_writebyte, addr);
-         OPCODE_END
+         OPCODE_END                  
 
       OPCODE_BEGIN(DD)  /* CMP $nnnn,X */
          CMP(4, ABS_IND_X_BYTE_READ);
@@ -2400,18 +2398,18 @@ end_execute:
    STORE_LOCAL_REGS();
 
    /* Return our actual amount of executed cycles */
-   return (nes_cpu.total_cycles - old_cycles);
+   return (cpu.total_cycles - old_cycles);
 }
 
 /* Issue a CPU Reset */
 void nes6502_reset(void)
 {
-   nes_cpu.p_reg = Z_FLAG | R_FLAG | I_FLAG;     /* Reserved bit always 1 */
-   nes_cpu.int_pending = 0;                      /* No pending interrupts */
-   nes_cpu.int_latency = 0;                      /* No latent interrupts */
-   nes_cpu.pc_reg = bank_readword(RESET_VECTOR); /* Fetch reset vector */
-   nes_cpu.burn_cycles = RESET_CYCLES;
-   nes_cpu.jammed = false;
+   cpu.p_reg = Z_FLAG | R_FLAG | I_FLAG;     /* Reserved bit always 1 */
+   cpu.int_pending = 0;                      /* No pending interrupts */
+   cpu.int_latency = 0;                      /* No latent interrupts */
+   cpu.pc_reg = bank_readword(RESET_VECTOR); /* Fetch reset vector */
+   cpu.burn_cycles = RESET_CYCLES;
+   cpu.jammed = false;
 }
 
 /* following macro is used for below 2 functions */
@@ -2426,11 +2424,11 @@ void nes6502_nmi(void)
 {
    DECLARE_LOCAL_REGS
 
-   if (false == nes_cpu.jammed)
+   if (false == cpu.jammed)
    {
       GET_GLOBAL_REGS();
       NMI_PROC();
-      nes_cpu.burn_cycles += INT_CYCLES;
+      cpu.burn_cycles += INT_CYCLES;
       STORE_LOCAL_REGS();
    }
 }
@@ -2440,17 +2438,17 @@ void nes6502_irq(void)
 {
    DECLARE_LOCAL_REGS
 
-   if (false == nes_cpu.jammed)
+   if (false == cpu.jammed)
    {
       GET_GLOBAL_REGS();
       if (0 == i_flag)
       {
          IRQ_PROC();
-         nes_cpu.burn_cycles += INT_CYCLES;
+         cpu.burn_cycles += INT_CYCLES;
       }
       else
       {
-         nes_cpu.int_pending = 1;
+         cpu.int_pending = 1;
       }
       STORE_LOCAL_REGS();
    }
@@ -2459,7 +2457,7 @@ void nes6502_irq(void)
 /* Set dead cycle period */
 void nes6502_burn(int cycles)
 {
-   nes_cpu.burn_cycles += cycles;
+   cpu.burn_cycles += cycles;
 }
 
 /* Release our timeslice */

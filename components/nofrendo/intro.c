@@ -326,7 +326,7 @@ static uint8 *intro_getrom(void)
 {
    uint8 *rom;
    
-   rom = _my_malloc(CODE_SIZE);
+   rom = malloc(CODE_SIZE);   
    if (NULL != rom)
    {
       /* good measure */
@@ -346,7 +346,7 @@ static uint8 *intro_getvrom(void)
 {
    uint8 *vrom;
 
-   vrom = _my_malloc(VROM_SIZE);
+   vrom = malloc(VROM_SIZE);
    if (NULL != vrom)
    {
       memcpy(vrom, intro_vrom, sizeof(intro_vrom));

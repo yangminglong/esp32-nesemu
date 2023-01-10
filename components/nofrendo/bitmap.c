@@ -3,14 +3,14 @@
 **
 **
 ** This program is free software; you can redistribute it and/or
-** modify it under the terms of version 2 of the GNU Library General
+** modify it under the terms of version 2 of the GNU Library General 
 ** Public License as published by the Free Software Foundation.
 **
-** This program is distributed in the hope that it will be useful,
+** This program is distributed in the hope that it will be useful, 
 ** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-** Library General Public License for more details.  To obtain a
-** copy of the GNU Library General Public License, write to the Free
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+** Library General Public License for more details.  To obtain a 
+** copy of the GNU Library General Public License, write to the Free 
 ** Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
 ** Any permitted reproduction of these routines, in whole or in part,
@@ -23,21 +23,17 @@
 ** $Id: bitmap.c,v 1.2 2001/04/27 14:37:11 neil Exp $
 */
 
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <noftypes.h>
 #include <bitmap.h>
-
-#include "spi_lcd.h"
-#include "esp_heap_caps.h"
 
 void bmp_clear(const bitmap_t *bitmap, uint8 color)
 {
    memset(bitmap->data, color, bitmap->pitch * bitmap->height);
 }
 
-static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
+static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width, 
                               int height, int pitch, int overdraw)
 {
    bitmap_t *bitmap;
@@ -48,7 +44,7 @@ static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
       return NULL;
 
    /* Make sure to add in space for line pointers */
-   bitmap = _my_malloc(sizeof(bitmap_t) + (sizeof(uint8 *) * height));
+   bitmap = malloc(sizeof(bitmap_t) + (sizeof(uint8 *) * height));
    if (NULL == bitmap)
       return NULL;
 
@@ -68,7 +64,7 @@ static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
       bitmap->line[0] = (uint8 *) (((uint32) bitmap->data + overdraw + 3) & ~3);
    }
    else
-   {
+   { 
       bitmap->line[0] = bitmap->data + overdraw;
    }
 
@@ -79,21 +75,15 @@ static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
 }
 
 /* Allocate and initialize a bitmap structure */
-// #define FRAME_BUFFER_LENGTH ((256 + (2 * 8)) * 240)
-// static uint8 *frameBuffer[FRAME_BUFFER_LENGTH];
 bitmap_t *bmp_create(int width, int height, int overdraw)
 {
-   printf("bmp_create: width=%d, height=%d, overdraw=%d\n", width, height, overdraw);
-
    uint8 *addr;
    int pitch;
 
    pitch = width + (overdraw * 2); /* left and right */
-   addr = get_frame_buffer1();
-   // if (frameBuffer == NULL) {
-   //     frameBuffer = (uint8*)heap_caps_malloc(FRAME_BUFFER_LENGTH, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM);
-   // }
-   // addr = frameBuffer;
+   addr = malloc((pitch * height) + 3); /* add max 32-bit aligned adjustment */
+   if (NULL == addr)
+      return NULL;
 
    return _make_bitmap(addr, false, width, height, width, overdraw);
 }
@@ -109,8 +99,8 @@ void bmp_destroy(bitmap_t **bitmap)
 {
    if (*bitmap)
    {
-      // if ((*bitmap)->data && false == (*bitmap)->hardware)
-      //   free((*bitmap)->data);
+      if ((*bitmap)->data && false == (*bitmap)->hardware)
+         free((*bitmap)->data);
       free(*bitmap);
       *bitmap = NULL;
    }
